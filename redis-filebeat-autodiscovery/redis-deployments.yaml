@@ -50,8 +50,14 @@ spec:
           # Dynamically get password from REDIS_{ordinal}_PASSWORD
           REDIS_PASSWORD=$(eval echo \$REDIS_${POD_ORDINAL}_PASSWORD)
 
-          echo "Starting Redis pod-${POD_ORDINAL} with configured password"
-          exec redis-server --requirepass "$REDIS_PASSWORD"
+          # Create log directory
+          mkdir -p /var/log/redis
+
+          echo "Starting Redis pod-${POD_ORDINAL} with configured password and file logging"
+          exec redis-server \
+            --requirepass "$REDIS_PASSWORD" \
+            --logfile /var/log/redis/redis-${POD_ORDINAL}.log \
+            --loglevel notice
         resources:
           requests:
             memory: "64Mi"
@@ -59,6 +65,14 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "200m"
+        volumeMounts:
+        - name: redis-logs
+          mountPath: /var/log/redis
+      volumes:
+      - name: redis-logs
+        hostPath:
+          path: /var/log/redis-pods
+          type: DirectoryOrCreate
 ---
 # Headless Service for StatefulSet
 apiVersion: v1

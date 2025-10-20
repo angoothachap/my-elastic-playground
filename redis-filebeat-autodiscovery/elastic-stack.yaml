@@ -165,6 +165,9 @@ spec:
         - name: varlog
           mountPath: /var/log
           readOnly: true
+        - name: redis-logs
+          mountPath: /var/log/redis-pods
+          readOnly: true
       volumes:
       - name: config
         configMap:
@@ -179,4 +182,8 @@ spec:
       - name: data
         hostPath:
           path: /var/lib/filebeat-data
+          type: DirectoryOrCreate
+      - name: redis-logs
+        hostPath:
+          path: /var/log/redis-pods
           type: DirectoryOrCreate

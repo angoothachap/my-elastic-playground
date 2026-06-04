@@ -1,0 +1,82 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elasticsearch
+  namespace: elastic-system
+spec:
+  version: 9.4.2
+  secureSettings:
+  - secretName: elastic-license
+  nodeSets:
+  # Data nodes - master, data, ingest roles
+  - name: default
+    count: 3
+    config:
+      node.store.allow_mmap: false
+      node.roles: ["master", "data", "ingest"]
+      xpack.security.enabled: true
+      xpack.security.authc.api_key.enabled: true
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          resources:
+            requests:
+              memory: 2Gi
+              cpu: 1
+            limits:
+              memory: 2Gi
+              cpu: 2
+          env:
+          - name: ES_JAVA_OPTS
+            value: "-Xms1g -Xmx1g"
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: standard
+
+  # ML nodes - dedicated for ELSER and machine learning tasks
+  - name: ml
+    count: 1
+    config:
+      node.store.allow_mmap: false
+      node.roles: ["ml", "remote_cluster_client"]
+      xpack.ml.max_machine_memory_percent: 90
+      xpack.ml.use_auto_machine_memory_percent: true
+      xpack.security.enabled: true
+      xpack.security.authc.api_key.enabled: true
+    podTemplate:
+      spec:
+        containers:
+        - name: elasticsearch
+          resources:
+            requests:
+              memory: 8Gi
+              cpu: 2
+            limits:
+              memory: 8Gi
+              cpu: 4
+          env:
+          - name: ES_JAVA_OPTS
+            value: "-Xms3g -Xmx3g"
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+        storageClassName: standard
+
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: false

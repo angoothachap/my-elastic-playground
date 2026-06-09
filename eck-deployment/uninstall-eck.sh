@@ -23,20 +23,31 @@ if [ "$confirm" != "yes" ]; then
 fi
 
 echo ""
-echo "Step 1: Deleting Kibana..."
+echo "Step 1: Deleting CloudTrail integration job and AWS credentials..."
+kubectl delete -f fleet/cloudtrail-integration.yaml --ignore-not-found=true
+kubectl delete -f fleet/aws-credentials.yaml --ignore-not-found=true
+echo -e "${GREEN}✓ CloudTrail integration resources deleted${NC}"
+echo ""
+
+echo "Step 2: Deleting Elastic Agent and Fleet Server..."
+kubectl delete -f fleet/fleet.yaml --ignore-not-found=true
+echo -e "${GREEN}✓ Fleet resources deleted${NC}"
+echo ""
+
+echo "Step 3: Deleting Kibana..."
 kubectl delete -f kibana.yaml --ignore-not-found=true
 echo -e "${GREEN}✓ Kibana deleted${NC}"
 echo ""
 
-echo "Step 2: Deleting Elasticsearch..."
+echo "Step 4: Deleting Elasticsearch..."
 kubectl delete -f elasticsearch.yaml --ignore-not-found=true
 echo -e "${GREEN}✓ Elasticsearch deleted${NC}"
 echo ""
 
-echo "Step 3: Waiting for resources to be cleaned up..."
+echo "Step 5: Waiting for resources to be cleaned up..."
 sleep 10
 
-echo "Step 4: Deleting namespace..."
+echo "Step 6: Deleting namespace..."
 kubectl delete -f namespace.yaml --ignore-not-found=true
 echo -e "${GREEN}✓ Namespace deleted${NC}"
 echo ""
@@ -45,7 +56,7 @@ read -p "Do you want to uninstall the ECK operator as well? (yes/no): " uninstal
 
 if [ "$uninstall_operator" = "yes" ]; then
     echo ""
-    echo "Step 5: Uninstalling ECK operator..."
+    echo "Step 7: Uninstalling ECK operator..."
     kubectl delete -f https://download.elastic.co/downloads/eck/2.15.0/operator.yaml --ignore-not-found=true
     kubectl delete -f https://download.elastic.co/downloads/eck/2.15.0/crds.yaml --ignore-not-found=true
     echo -e "${GREEN}✓ ECK operator uninstalled${NC}"

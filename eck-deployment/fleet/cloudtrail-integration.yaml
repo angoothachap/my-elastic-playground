@@ -1,0 +1,121 @@
+---
+# Job that registers the AWS CloudTrail integration with Fleet via the Kibana API.
+# This runs once after Fleet Server and Kibana are healthy.
+# It installs the aws package and creates a package policy on the eck-agent policy.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cloudtrail-integration-setup
+  namespace: elastic-system
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: setup
+        image: curlimages/curl:8.7.1
+        env:
+        - name: KIBANA_URL
+          value: "https://kibana-kb-http.elastic-system.svc:5601"
+        - name: ES_USERNAME
+          value: "elastic"
+        - name: ES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-es-elastic-user
+              key: elastic
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: access_key_id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: secret_access_key
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+
+          CURL="curl -sk -u ${ES_USERNAME}:${ES_PASSWORD} -H 'kbn-xsrf: true' -H 'Content-Type: application/json'"
+
+          echo "Waiting for Kibana to be ready..."
+          until eval "$CURL ${KIBANA_URL}/api/status" | grep -q '"overall":{"level":"available"'; do
+            echo "  Kibana not ready yet, retrying in 10s..."
+            sleep 10
+          done
+          echo "Kibana is ready."
+
+          echo "Installing aws integration package..."
+          eval "$CURL -X POST '${KIBANA_URL}/api/fleet/epm/packages/aws' \
+            -d '{\"force\": true}'"
+          echo ""
+
+          echo "Creating CloudTrail package policy on agent policy..."
+          eval "$CURL -X POST '${KIBANA_URL}/api/fleet/package_policies' -d '{
+            \"name\": \"aws-cloudtrail\",
+            \"description\": \"AWS CloudTrail logs via S3 SQS\",
+            \"policy_id\": \"agent-policy\",
+            \"enabled\": true,
+            \"package\": {
+              \"name\": \"aws\",
+              \"title\": \"AWS\",
+              \"version\": \"latest\"
+            },
+            \"inputs\": [
+              {
+                \"type\": \"aws-s3\",
+                \"policy_template\": \"cloudtrail\",
+                \"enabled\": true,
+                \"streams\": [
+                  {
+                    \"data_stream\": {
+                      \"type\": \"logs\",
+                      \"dataset\": \"aws.cloudtrail\"
+                    },
+                    \"enabled\": true,
+                    \"vars\": {
+                      \"queue_url\": {
+                        \"value\": \"\",
+                        \"type\": \"text\"
+                      },
+                      \"access_key_id\": {
+                        \"value\": \"${AWS_ACCESS_KEY_ID}\",
+                        \"type\": \"password\"
+                      },
+                      \"secret_access_key\": {
+                        \"value\": \"${AWS_SECRET_ACCESS_KEY}\",
+                        \"type\": \"password\"
+                      },
+                      \"region\": {
+                        \"value\": \"us-east-1\",
+                        \"type\": \"text\"
+                      },
+                      \"bucket_list_prefix\": {
+                        \"value\": \"\",
+                        \"type\": \"text\"
+                      },
+                      \"number_of_workers\": {
+                        \"value\": 5,
+                        \"type\": \"integer\"
+                      },
+                      \"visibility_timeout\": {
+                        \"value\": \"300s\",
+                        \"type\": \"text\"
+                      },
+                      \"api_timeout\": {
+                        \"value\": \"120s\",
+                        \"type\": \"text\"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }'"
+          echo ""
+          echo "CloudTrail integration setup complete."

@@ -113,12 +113,40 @@ echo ""
 
 # Step 8: Wait for Kibana to be ready
 echo "Step 8: Waiting for Kibana to be ready..."
-kubectl get kibana kibana -n elastic-system -o jsonpath='{.status.health}'
+kubectl wait --for=jsonpath='{.status.health}'=green --timeout=300s kibana/kibana -n elastic-system
 
-echo -e "${green}✓ Kibana is ready${NC}"
+echo -e "${GREEN}✓ Kibana is ready${NC}"
 echo ""
 
-# Step 9: Get credentials and endpoints
+# Step 9: Deploy Fleet Server and Elastic Agent
+echo "Step 9: Deploying Fleet Server and Elastic Agent..."
+kubectl apply -f "${SCRIPT_DIR}/fleet/fleet.yaml"
+
+echo -e "${GREEN}✓ Fleet Server and Elastic Agent deployment initiated${NC}"
+echo ""
+
+# Step 10: Wait for Fleet Server to be ready
+echo "Step 10: Waiting for Fleet Server pod to be ready..."
+kubectl wait --for=condition=Ready pod -l agent.k8s.elastic.co/name=fleet-server -n elastic-system --timeout=300s
+
+echo -e "${GREEN}✓ Fleet Server is ready${NC}"
+echo ""
+
+# Step 11: Deploy AWS CloudTrail integration
+echo "Step 11: Deploying AWS CloudTrail integration..."
+if kubectl get secret aws-credentials -n elastic-system &> /dev/null; then
+    kubectl apply -f "${SCRIPT_DIR}/fleet/cloudtrail-integration.yaml"
+    echo -e "${GREEN}✓ CloudTrail integration job submitted${NC}"
+    echo "Monitor with: kubectl logs -n elastic-system job/cloudtrail-integration-setup -f"
+else
+    echo -e "${YELLOW}Warning: Secret 'aws-credentials' not found in elastic-system.${NC}"
+    echo "Fill in fleet/aws-credentials.yaml with your AWS credentials and run:"
+    echo "  kubectl apply -f ${SCRIPT_DIR}/fleet/aws-credentials.yaml"
+    echo "  kubectl apply -f ${SCRIPT_DIR}/fleet/cloudtrail-integration.yaml"
+fi
+echo ""
+
+# Step 11: Get credentials and endpoints
 echo "================================================"
 echo "Deployment Complete!"
 echo "================================================"
@@ -168,4 +196,18 @@ echo ""
 # Verify license status
 echo "Verify license:"
 echo "  curl -u \"elastic:${ES_PASSWORD}\" -k \"https://localhost:9200/_license\""
+echo ""
+
+echo "Fleet Server Endpoint:"
+echo "-------------------------"
+echo "Internal (from within cluster):"
+echo "  https://fleet-server-agent-http.elastic-system.svc:8220"
+echo ""
+echo "External (port-forward):"
+echo "  Run: kubectl port-forward service/fleet-server-agent-http 8220 -n elastic-system"
+echo "  Then access: https://localhost:8220"
+echo ""
+
+echo "Check Fleet Server status:"
+echo "  kubectl get agent -n elastic-system"
 echo ""
